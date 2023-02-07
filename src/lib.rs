@@ -1,7 +1,7 @@
 use std::{
     fs,
     iter::{Enumerate, Peekable},
-    str::{Chars, FromStr},
+    str::{Chars, FromStr}
 };
 
 use rppal::{
@@ -119,21 +119,21 @@ impl Angelio {
         reg
     }
 
-    fn get_register_value(&self, reg: String, old_idx: usize) -> RegRet {
+    fn get_register_value(&self, reg: String, old_idx: usize) -> Result<RegRet, String> {
         match reg.as_str() {
-            "r1" => RegRet::Normal(self.r1),
-            "r2" => RegRet::Normal(self.r2),
-            "r3" => RegRet::Normal(self.r3),
-            "r4" => RegRet::Normal(self.r4),
-            "f1" => RegRet::Floating(self.f1),
-            "f2" => RegRet::Floating(self.f1),
-            "f3" => RegRet::Floating(self.f3),
-            "f4" => RegRet::Floating(self.f4),
-            _ => panic!("Invalid register name {}", old_idx + 1),
+            "r1" => Ok(RegRet::Normal(self.r1)),
+            "r2" => Ok(RegRet::Normal(self.r2)),
+            "r3" => Ok(RegRet::Normal(self.r3)),
+            "r4" => Ok(RegRet::Normal(self.r4)),
+            "f1" => Ok(RegRet::Floating(self.f1)),
+            "f2" => Ok(RegRet::Floating(self.f1)),
+            "f3" => Ok(RegRet::Floating(self.f3)),
+            "f4" => Ok(RegRet::Floating(self.f4)),
+            _ => Err(format!("Invalid register name {}", old_idx + 1)),
         }
     }
 
-    pub fn get_register_value_as_array(
+    fn get_register_value_as_array(
         &self,
         reg1: String,
         reg2: String,
@@ -141,12 +141,12 @@ impl Angelio {
     ) -> [f32; 2] {
         let mut args: [f32; 2] = [0., 0.];
 
-        match self.get_register_value(reg1, old_idx + 1) {
+        match self.get_register_value(reg1, old_idx + 1).unwrap() {
             RegRet::Normal(val) => args[0] = val as f32,
             RegRet::Floating(val) => args[0] = val,
         }
 
-        match self.get_register_value(reg2, old_idx + 3) {
+        match self.get_register_value(reg2, old_idx + 3).unwrap() {
             RegRet::Normal(val) => args[1] = val as f32,
             RegRet::Floating(val) => args[1] = val,
         }
@@ -154,47 +154,51 @@ impl Angelio {
         args
     }
 
-    pub fn set_register(&mut self, register: u32, value: u32) {
+    pub fn set_register(&mut self, register: u32, value: u32) -> Result<(), String> {
         match register {
             1 => self.r1 = value,
             2 => self.r2 = value,
             3 => self.r3 = value,
             4 => self.r4 = value,
-            _ => panic!("Invalid register number: {}", register),
+            _ => return Err(format!("Invalid register number: {}", register)),
         };
+        Ok(())
     }
 
-    pub fn set_float_register(&mut self, register: u32, value: f32) {
+    pub fn set_float_register(&mut self, register: u32, value: f32) -> Result<(), String> {
         match register {
             1 => self.f1 = value,
             2 => self.f2 = value,
             3 => self.f3 = value,
             4 => self.f4 = value,
-            _ => panic!("Invalid register number: {}", register),
+            _ => return Err(format!("Invalid register number: {}", register))
         };
+        Ok(())
     }
 
-    pub fn set_register_by_name(&mut self, reg: String, value: u32) {
+    pub fn set_register_by_name(&mut self, reg: String, value: u32) -> Result<(), String> {
         match reg.as_str() {
             "r1" => self.r1 = value,
             "r2" => self.r2 = value,
             "r3" => self.r3 = value,
             "r4" => self.r4 = value,
-            _ => panic!("Invalid register: {}", reg),
+            _ => return Err(format!("Invalid register: {}", reg))
         }
+        Ok(())
     }
 
-    pub fn set_float_register_by_name(&mut self, reg: String, value: f32) {
+    pub fn set_float_register_by_name(&mut self, reg: String, value: f32) -> Result<(), String> {
         match reg.as_str() {
             "f1" => self.f1 = value,
             "f2" => self.f2 = value,
             "f3" => self.f3 = value,
             "f4" => self.f4 = value,
-            _ => panic!("Invalid register: {}", reg),
-        }
+            _ => return Err(format!("Invalid register: {}", reg))
+        };
+        Ok(())
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> Result<(), String> {
         let mcode = &mut (self.code.clone());
         let mut source = mcode.chars().enumerate().peekable();
         while let Some((idx, c)) = source.next() {
@@ -228,7 +232,7 @@ impl Angelio {
                         .get_number::<f32>(&mut source, idx)
                         .unwrap_or_else(|_| panic!("Value is not a valid float ({})", idx + 1));
                     let calculation = self.pid.calculate(measurement);
-                    self.set_float_register(3, calculation);
+                    self.set_float_register(3, calculation)?;
                 }
                 'l' => {
                     let reg = self.get_register_argument(&mut source, idx);
@@ -236,9 +240,9 @@ impl Angelio {
                         .get_number::<f32>(&mut source, idx)
                         .unwrap_or_else(|_| panic!("Value is not a valid number ({})", idx + 1));
                     if reg.starts_with('r') {
-                        self.set_register_by_name(reg, num as u32);
+                        self.set_register_by_name(reg, num as u32)?;
                     } else {
-                        self.set_float_register_by_name(reg, num);
+                        self.set_float_register_by_name(reg, num)?;
                     }
                 }
                 '+' => {
@@ -273,20 +277,20 @@ impl Angelio {
                     );
 
                     if first_name.starts_with('r') {
-                        self.set_float_register_by_name(second_name.to_owned(), args[0]);
+                        self.set_float_register_by_name(second_name.to_owned(), args[0])?;
                     } else {
-                        self.set_register_by_name(second_name.to_owned(), args[0] as u32);
+                        self.set_register_by_name(second_name.to_owned(), args[0] as u32)?;
                     }
 
                     if second_name.starts_with('r') {
-                        self.set_float_register_by_name(first_name, args[1]);
+                        self.set_float_register_by_name(first_name, args[1])?;
                     } else {
-                        self.set_register_by_name(first_name, args[1] as u32);
+                        self.set_register_by_name(first_name, args[1] as u32)?;
                     }
                 }
                 '!' => {
                     let reg = self.get_register_argument(&mut source, idx);
-                    match self.get_register_value(reg, idx) {
+                    match self.get_register_value(reg, idx)? {
                         RegRet::Normal(val) => println!("{}", val),
                         RegRet::Floating(val) => println!("{}", val),
                     }
@@ -297,7 +301,7 @@ impl Angelio {
                         self.get_number::<u8>(&mut source, idx).unwrap_or_else(|_| {
                             panic!("Value is not a valid port number ({})", idx + 1)
                         });
-                    let value = match self.get_register_value(reg, idx) {
+                    let value = match self.get_register_value(reg, idx)? {
                         RegRet::Normal(val) => val,
                         RegRet::Floating(val) => val as u32,
                     };
@@ -323,9 +327,9 @@ impl Angelio {
                     };
 
                     if reg.starts_with('r') {
-                        self.set_register_by_name(reg, out);
+                        self.set_register_by_name(reg, out)?;
                     } else {
-                        self.set_float_register_by_name(reg, out as f32);
+                        self.set_float_register_by_name(reg, out as f32)?;
                     }
                 }
                 'p' => {
@@ -334,7 +338,7 @@ impl Angelio {
                         self.get_number::<u8>(&mut source, idx).unwrap_or_else(|_| {
                             panic!("Value is not a valid port number ({})", idx + 1)
                         });
-                    let value = match self.get_register_value(reg, idx) {
+                    let value = match self.get_register_value(reg, idx)? {
                         RegRet::Normal(val) => val as f32,
                         RegRet::Floating(val) => val,
                     };
@@ -358,17 +362,14 @@ impl Angelio {
                         let mut port = self.get_port(port_number).into_output();
                         port.set_pwm_frequency(8., value as f64)
                             .unwrap_or_else(|_| {
-                                panic!(
-                                    "Cannot use soft PWM on port {} ({})",
-                                    port_number,
-                                    idx + 1
-                                )
+                                panic!("Cannot use soft PWM on port {} ({})", port_number, idx + 1)
                             });
                     }
                 }
                 _ => {}
             }
-        }
+        };
+        Ok(())
     }
 }
 
