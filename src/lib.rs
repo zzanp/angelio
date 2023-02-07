@@ -1,7 +1,7 @@
 use std::{
     fs,
     iter::{Enumerate, Peekable},
-    str::{Chars, FromStr}
+    str::{Chars, FromStr},
 };
 
 use rppal::{
@@ -34,12 +34,12 @@ pub struct Angelio {
 impl Angelio {
     pub fn new(path: &str) {
         let source =
-            fs::read_to_string(path).unwrap_or_else(|_| panic!("Failed to open file {}", path));
+            fs::read_to_string(path).unwrap_or_else(|_| panic!("Failed to open file {path}"));
         Angelio::from_string(source);
     }
 
     pub fn from_string(source: String) -> Angelio {
-        let mut s = source.clone();
+        let mut s = source;
         s.push('\0');
         Angelio {
             r1: 0,
@@ -66,24 +66,24 @@ impl Angelio {
     ) -> Result<T, <T as FromStr>::Err> {
         let mut val = String::new();
         while let Some((idx, c)) = source.peek() {
-            if c.is_digit(10) || *c == '.' {
+            if c.is_ascii_digit() || *c == '.' {
                 val.push(*c);
                 source.next();
-            } else if val.len() == 0 {
+            } else if val.is_empty() {
                 panic!("Invalid value ({})", idx + 1);
             } else {
                 let num = val.parse::<T>();
                 return num;
             }
         }
-        panic!("Can't get any number ({})", old_idx);
+        panic!("Can't get any number ({old_idx})",);
     }
 
     fn get_port(&self, port: u8) -> Pin {
         Gpio::new()
             .unwrap_or_else(|_| panic!("GPIO device could not be opened"))
             .get(port)
-            .unwrap_or_else(|_| panic!("Could not get GPIO port {}", port))
+            .unwrap_or_else(|_| panic!("Could not get GPIO port {port}"))
     }
 
     fn get_register_argument(
@@ -95,7 +95,7 @@ impl Angelio {
             .next()
             .unwrap_or_else(|| panic!("Unable to retrieve any register type ({})", old_idx + 1));
         if regtype != 'r' && regtype != 'f' {
-            panic!("Invalid register type found ('{}') ({})", regtype, ridx + 1);
+            panic!("Invalid register type found ('{regtype}') ({})", ridx + 1);
         }
 
         let (nidx, regn) = source
@@ -108,8 +108,8 @@ impl Angelio {
                 old_idx + 3
             )
         });
-        if regni < 1 || regni > 4 {
-            panic!("Invalid register number found ({}) ({})", regn, nidx + 1);
+        if !(1..=4).contains(&regni) {
+            panic!("Invalid register number found ({regn}) ({})", nidx + 1);
         }
 
         let mut reg = String::new();
@@ -133,12 +133,7 @@ impl Angelio {
         }
     }
 
-    fn get_register_value_as_array(
-        &self,
-        reg1: String,
-        reg2: String,
-        old_idx: usize,
-    ) -> [f32; 2] {
+    fn get_register_value_as_array(&self, reg1: String, reg2: String, old_idx: usize) -> [f32; 2] {
         let mut args: [f32; 2] = [0., 0.];
 
         match self.get_register_value(reg1, old_idx + 1).unwrap() {
@@ -160,7 +155,7 @@ impl Angelio {
             2 => self.r2 = value,
             3 => self.r3 = value,
             4 => self.r4 = value,
-            _ => return Err(format!("Invalid register number: {}", register)),
+            _ => return Err(format!("Invalid register number: {register}")),
         };
         Ok(())
     }
@@ -171,7 +166,7 @@ impl Angelio {
             2 => self.f2 = value,
             3 => self.f3 = value,
             4 => self.f4 = value,
-            _ => return Err(format!("Invalid register number: {}", register))
+            _ => return Err(format!("Invalid register number: {register}")),
         };
         Ok(())
     }
@@ -182,7 +177,7 @@ impl Angelio {
             "r2" => self.r2 = value,
             "r3" => self.r3 = value,
             "r4" => self.r4 = value,
-            _ => return Err(format!("Invalid register: {}", reg))
+            _ => return Err(format!("Invalid register: {reg}")),
         }
         Ok(())
     }
@@ -193,7 +188,7 @@ impl Angelio {
             "f2" => self.f2 = value,
             "f3" => self.f3 = value,
             "f4" => self.f4 = value,
-            _ => return Err(format!("Invalid register: {}", reg))
+            _ => return Err(format!("Invalid register: {reg}")),
         };
         Ok(())
     }
@@ -291,8 +286,8 @@ impl Angelio {
                 '!' => {
                     let reg = self.get_register_argument(&mut source, idx);
                     match self.get_register_value(reg, idx)? {
-                        RegRet::Normal(val) => println!("{}", val),
-                        RegRet::Floating(val) => println!("{}", val),
+                        RegRet::Normal(val) => println!("{val}"),
+                        RegRet::Floating(val) => println!("{val}"),
                     }
                 }
                 'o' => {
@@ -356,19 +351,19 @@ impl Angelio {
                             true,
                         )
                         .unwrap_or_else(|_| {
-                            panic!("Cannot use PWM on port {} ({})", port_number, idx + 1)
+                            panic!("Cannot use PWM on port {port_number} ({})", idx + 1)
                         });
                     } else {
                         let mut port = self.get_port(port_number).into_output();
                         port.set_pwm_frequency(8., value as f64)
                             .unwrap_or_else(|_| {
-                                panic!("Cannot use soft PWM on port {} ({})", port_number, idx + 1)
+                                panic!("Cannot use soft PWM on port {port_number} ({})", idx + 1)
                             });
                     }
                 }
                 _ => {}
             }
-        };
+        }
         Ok(())
     }
 }
