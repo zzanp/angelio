@@ -32,10 +32,10 @@ pub struct Angelio {
 }
 
 impl Angelio {
-    pub fn new(path: &str) {
+    pub fn new(path: &str) -> Angelio {
         let source =
             fs::read_to_string(path).unwrap_or_else(|_| panic!("Failed to open file {path}"));
-        Angelio::from_string(source);
+        Angelio::from_string(source)
     }
 
     pub fn from_string(source: String) -> Angelio {
