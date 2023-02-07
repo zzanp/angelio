@@ -9,8 +9,6 @@ use rppal::{
     pwm::{Channel, Polarity, Pwm},
 };
 
-mod pid;
-
 enum RegRet {
     Normal(u32),
     Floating(f32),
@@ -27,7 +25,12 @@ pub struct Angelio {
     pub f3: f32,
     pub f4: f32,
 
-    pid: pid::PID,
+    pid_p: f32,
+    pid_i: f32,
+    pid_d: f32,
+    pid_setpoint: f32,
+    pid_prev_error: f32,
+    pid_tot_error: f32,
     code: String,
 }
 
@@ -50,7 +53,12 @@ impl Angelio {
             f2: 0.,
             f3: 0.,
             f4: 0.,
-            pid: pid::PID::new(0., 0., 0.),
+            pid_p: 0.,
+            pid_i: 0.,
+            pid_d: 0.,
+            pid_setpoint: 0.,
+            pid_prev_error: 0.,
+            pid_tot_error: 0.,
             code: s,
         }
     }
@@ -202,31 +210,44 @@ impl Angelio {
                     let p = self
                         .get_number::<f32>(&mut source, idx)
                         .unwrap_or_else(|_| panic!("Value is not a valid float ({})", idx + 1));
-                    self.pid.p = p;
+                    self.pid_p = p;
                 }
                 'I' => {
                     let i = self
                         .get_number::<f32>(&mut source, idx)
                         .unwrap_or_else(|_| panic!("Value is not a valid float ({})", idx + 1));
-                    self.pid.i = i
+                    self.pid_i = i
                 }
                 'D' => {
                     let d = self
                         .get_number::<f32>(&mut source, idx)
                         .unwrap_or_else(|_| panic!("Value is not a valid float ({})", idx + 1));
-                    self.pid.d = d;
+                    self.pid_d = d;
                 }
                 'q' => {
                     let setpoint = self
                         .get_number::<f32>(&mut source, idx)
                         .unwrap_or_else(|_| panic!("Value is not a valid float ({})", idx + 1));
-                    self.pid.setpoint = setpoint;
+                    self.pid_setpoint = setpoint;
                 }
                 'c' => {
                     let measurement = self
                         .get_number::<f32>(&mut source, idx)
                         .unwrap_or_else(|_| panic!("Value is not a valid float ({})", idx + 1));
-                    let calculation = self.pid.calculate(measurement);
+                    let pos_error = self.pid_setpoint - measurement;
+                    let verror = (pos_error - self.pid_prev_error) / 0.02;
+                    self.pid_prev_error = pos_error;
+                    if self.pid_i != 0.0 {
+                        let a = self.pid_tot_error + pos_error * 0.02;
+                        if a < -1.0 / self.pid_i {
+                            self.pid_tot_error = -1.0 / self.pid_i;
+                        } else if a > 1.0 / self.pid_i {
+                            self.pid_tot_error = 1.0 / self.pid_i;
+                        } else {
+                            self.pid_tot_error = a;
+                        }
+                    }
+                    let calculation = self.pid_p * pos_error + self.pid_i * self.pid_tot_error + self.pid_d * verror;
                     self.set_float_register(3, calculation)?;
                 }
                 'l' => {
