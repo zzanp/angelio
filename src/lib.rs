@@ -14,6 +14,12 @@ enum RegRet {
     Floating(f32),
 }
 
+struct Motor {
+    pub in1: u8,
+    pub in2: u8,
+    pub en1: u8,
+}
+
 pub struct Angelio {
     pub r1: u32,
     pub r2: u32,
@@ -31,6 +37,9 @@ pub struct Angelio {
     pid_setpoint: f32,
     pid_prev_error: f32,
     pid_tot_error: f32,
+
+    motor_init_status: usize,
+    motors: Vec<Motor>,
 
     code: String,
 }
@@ -62,6 +71,9 @@ impl Angelio {
             pid_prev_error: 0.,
             pid_tot_error: 0.,
 
+            motor_init_status: 0,
+            motors: Vec::new(),
+
             code: s,
         }
     }
@@ -83,13 +95,13 @@ impl Angelio {
                 value as f64,
                 Polarity::Normal,
                 true,
-            )?;
+            )
+            .unwrap_or_else(|_| panic!("PWM could not be created (pin {pin})"));
         } else {
             let mut port = self.get_port(pin).into_output();
-            port.set_pwm_frequency(freq as f64, value as f64)?;
+            port.set_pwm_frequency(freq as f64, value as f64)
+                .unwrap_or_else(|_| panic!("PWM could not be created (pin {pin})"));
         }
-
-        Ok(())
     }
 
     fn get_number<T: FromStr>(
@@ -387,10 +399,7 @@ impl Angelio {
                     };
                     self.set_pwm_channel(port_number, value, 8.);
                 }
-
-                _ => {}
-            }
-            's' => {
+                's' => {
                     let reg = self.get_register_argument(&mut source, idx);
                     let port_number =
                         self.get_number::<u8>(&mut source, idx).unwrap_or_else(|_| {
@@ -400,9 +409,50 @@ impl Angelio {
                         RegRet::Normal(val) => val as f32,
                         RegRet::Floating(val) => val,
                     };
-                    let val = (value + 1) * 0.015 + 0.06;
-                    
+                    let val = (value + 1.) * 0.015 + 0.06;
+
                     self.set_pwm_channel(port_number, val, 50.);
+                }
+                'M' => {
+                    let id = self.motor_init_status / 3;
+                    if self.motors.len() < id - 1 {
+                        self.motors.push(Motor {
+                            in1: 0,
+                            in2: 0,
+                            en1: 0,
+                        })
+                    }
+                    let port = self.get_number::<u8>(&mut source, idx).unwrap_or_else(|_| {
+                        panic!("Value is not a valid port number ({})", idx + 1)
+                    });
+                    match self.motor_init_status % 3 {
+                        0 => self.motors.get_mut(id).unwrap().in1 = port,
+                        1 => self.motors.get_mut(id).unwrap().in2 = port,
+                        2 => self.motors.get_mut(id).unwrap().en1 = port,
+                        _ => {}
+                    }
+                }
+                'm' => {
+                    let reg = self.get_register_argument(&mut source, idx);
+                    let motor_id =
+                        self.get_number::<usize>(&mut source, idx)
+                            .unwrap_or_else(|_| {
+                                panic!("Value is not a valid port number ({})", idx + 1)
+                            });
+                    let value = match self.get_register_value(reg, idx)? {
+                        RegRet::Normal(val) => val as f32,
+                        RegRet::Floating(val) => val,
+                    };
+                    let motor = self.motors.get(motor_id);
+                    if motor.is_none() {
+                        return Err(format!("Value is not a valid motor ID ({})", idx + 1));
+                    }
+                    let m = motor.unwrap();
+                    self.get_port(m.in1).into_output().set_high();
+                    self.get_port(m.in2).into_output().set_low();
+                    self.set_pwm_channel(m.en1, value, 8.);
+                }
+                _ => {}
             }
         }
         Ok(())
