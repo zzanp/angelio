@@ -31,6 +31,7 @@ pub struct Angelio {
     pid_setpoint: f32,
     pid_prev_error: f32,
     pid_tot_error: f32,
+
     code: String,
 }
 
@@ -53,18 +54,42 @@ impl Angelio {
             f2: 0.,
             f3: 0.,
             f4: 0.,
+
             pid_p: 0.,
             pid_i: 0.,
             pid_d: 0.,
             pid_setpoint: 0.,
             pid_prev_error: 0.,
             pid_tot_error: 0.,
+
             code: s,
         }
     }
 
     pub fn from_str(source: &str) -> Angelio {
         Angelio::from_string(source.to_string())
+    }
+
+    fn set_pwm_channel(&self, pin: u8, value: f32, freq: f32) {
+        // TODO: Better PWM management
+        if (18..=19).contains(&pin) {
+            Pwm::with_frequency(
+                if pin == 18 {
+                    Channel::Pwm0
+                } else {
+                    Channel::Pwm1
+                },
+                freq as f64,
+                value as f64,
+                Polarity::Normal,
+                true,
+            )?;
+        } else {
+            let mut port = self.get_port(pin).into_output();
+            port.set_pwm_frequency(freq as f64, value as f64)?;
+        }
+
+        Ok(())
     }
 
     fn get_number<T: FromStr>(
@@ -247,7 +272,9 @@ impl Angelio {
                             self.pid_tot_error = a;
                         }
                     }
-                    let calculation = self.pid_p * pos_error + self.pid_i * self.pid_tot_error + self.pid_d * verror;
+                    let calculation = self.pid_p * pos_error
+                        + self.pid_i * self.pid_tot_error
+                        + self.pid_d * verror;
                     self.set_float_register(3, calculation)?;
                 }
                 'l' => {
@@ -358,29 +385,7 @@ impl Angelio {
                         RegRet::Normal(val) => val as f32,
                         RegRet::Floating(val) => val,
                     };
-
-                    if port_number == 18 || port_number == 19 {
-                        Pwm::with_frequency(
-                            if port_number == 18 {
-                                Channel::Pwm0
-                            } else {
-                                Channel::Pwm1
-                            },
-                            8.,
-                            value as f64,
-                            Polarity::Normal,
-                            true,
-                        )
-                        .unwrap_or_else(|_| {
-                            panic!("Cannot use PWM on port {port_number} ({})", idx + 1)
-                        });
-                    } else {
-                        let mut port = self.get_port(port_number).into_output();
-                        port.set_pwm_frequency(8., value as f64)
-                            .unwrap_or_else(|_| {
-                                panic!("Cannot use soft PWM on port {port_number} ({})", idx + 1)
-                            });
-                    }
+                    self.set_pwm_channel(port_number, value, 8.);
                 }
                 _ => {}
             }
