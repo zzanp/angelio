@@ -387,7 +387,22 @@ impl Angelio {
                     };
                     self.set_pwm_channel(port_number, value, 8.);
                 }
+
                 _ => {}
+            }
+            's' => {
+                    let reg = self.get_register_argument(&mut source, idx);
+                    let port_number =
+                        self.get_number::<u8>(&mut source, idx).unwrap_or_else(|_| {
+                            panic!("Value is not a valid port number ({})", idx + 1)
+                        });
+                    let value = match self.get_register_value(reg, idx)? {
+                        RegRet::Normal(val) => val as f32,
+                        RegRet::Floating(val) => val,
+                    };
+                    let val = (value + 1) * 0.015 + 0.06;
+                    
+                    self.set_pwm_channel(port_number, val, 50.);
             }
         }
         Ok(())
