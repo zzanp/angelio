@@ -78,10 +78,6 @@ impl Angelio {
         }
     }
 
-    pub fn from_str(source: &str) -> Angelio {
-        Angelio::from_string(source.to_string())
-    }
-
     fn set_pwm_channel(&self, pin: u8, value: f32, freq: f32) {
         // TODO: Better PWM management
         if (18..=19).contains(&pin) {
@@ -459,27 +455,35 @@ impl Angelio {
     }
 }
 
+impl std::str::FromStr for Angelio {
+    type Err = ();
+
+    fn from_str(source: &str) -> Result<Self, Self::Err> {
+        Ok(Angelio::from_string(source.to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn set_register() {
-        let mut script = Angelio::from_str("lr123");
+        let mut script = Angelio::from_str("lr123").unwrap();
         script.run().unwrap();
         assert_eq!(script.r1, 23);
     }
 
     #[test]
     fn basic_pid() {
-        let mut script = Angelio::from_str("P2I13D7q420c69");
+        let mut script = Angelio::from_str("P2I13D7q420c69").unwrap();
         script.run().unwrap();
         assert_eq!(script.f3, 123553.);
     }
 
     #[test]
     fn add() {
-        let mut script = Angelio::from_str("lr121lr237+r1r2lf13.14+r3f1");
+        let mut script = Angelio::from_str("lr121lr237+r1r2lf13.14+r3f1").unwrap();
         script.run().unwrap();
         assert_eq!(script.r3, 58);
         assert_eq!(script.f3, 61.14);
@@ -487,7 +491,7 @@ mod tests {
 
     #[test]
     fn move_register() {
-        let mut script = Angelio::from_str("lr121lf137Tr1f1");
+        let mut script = Angelio::from_str("lr121lf137Tr1f1").unwrap();
         script.run().unwrap();
         assert_eq!(script.r1, 37);
         assert_eq!(script.f1, 21.0);

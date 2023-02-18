@@ -14,7 +14,7 @@ let mut script = Angelio::new("path/to/file.aio");
 Alternatively, you can create a script reading a string directly from a variable:
 
 ```rust
-let mut script = Angelio::from_str("lr121lr237+r1r2+Tr3r1");    // or from_string for String
+let mut script = Angelio::from_str("lr121lr237+r1r2+Tr3r1").unwrap();    // or just from_string for String
 ```
 
 
